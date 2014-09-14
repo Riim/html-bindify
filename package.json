@@ -1,0 +1,22 @@
+{
+  "name": "html-bindify",
+  "version": "0.1.4",
+  "description": "html-bindify",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Riim/html-bindify.git"
+  },
+  "author": "Dmitry Vibe",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Riim/html-bindify/issues"
+  },
+  "homepage": "https://github.com/Riim/html-bindify",
+  "dependencies": {
+    "htmlparser2": "^3.7.3"
+  }
+}
