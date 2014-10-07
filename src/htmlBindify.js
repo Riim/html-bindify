@@ -168,7 +168,7 @@ function dataToJS(data) {
  * @param {string} [attrName]
  * @param {Array<string>} data
  */
-function pushBinding_(item, type, attrName, data) {
+function pushBinding(item, type, attrName, data) {
 	var attrs;
 
 	if (type == 'text') {
@@ -202,22 +202,20 @@ var defaults = {
 
 /**
  * @param {string} html
- * @param {Function} [pushBinding]
  * @param {Object} [options]
  * @param {boolean} [options.xhtmlMode=false]
  * @param {Array} [options.templateDelimiters=[['<%', '%>'], ['{{', '}}']]]
  * @param {Array} [options.bindingDelimiters=['{', '}']]
+ * @param {Function} [options.pushBinding]
  * @returns {string}
  */
-function htmlBindify(html, pushBinding, options) {
-	if (!pushBinding) {
-		pushBinding = pushBinding_;
-	}
-
+function htmlBindify(html, options) {
 	if (!options) {
 		options = {};
 	}
 	options.__proto__ = defaults;
+
+	var pushBinding_ = options.pushBinding || pushBinding;
 
 	var clippings = [];
 	var idCounter = 0;
@@ -251,7 +249,7 @@ function htmlBindify(html, pushBinding, options) {
 			var text = item.data.split(reBinding);
 
 			if (text.length > 1) {
-				pushBinding(item, 'text', undefined, text);
+				pushBinding_(item, 'text', undefined, text);
 			}
 		} else if (item.type == 'tag') {
 			var attrs = item.attribs;
@@ -261,7 +259,7 @@ function htmlBindify(html, pushBinding, options) {
 					var value = attrs[name].split(reBinding);
 
 					if (value.length > 1) {
-						pushBinding(item, 'attr', name, value);
+						pushBinding_(item, 'attr', name, value);
 					}
 				}
 			});
