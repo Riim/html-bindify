@@ -255,7 +255,7 @@ function htmlBindify(html, options) {
 			var attrs = item.attribs;
 
 			Object.keys(attrs).forEach(function(name) {
-				if (name != 'data-bind') {
+				if (name.slice(0, 5) != 'data-') {
 					var value = attrs[name].split(reBinding);
 
 					if (value.length > 1) {
