@@ -1,6 +1,6 @@
 {
   "name": "html-bindify",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "html-bindify",
   "main": "index.js",
   "scripts": {

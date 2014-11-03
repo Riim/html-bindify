@@ -226,7 +226,7 @@ function htmlBindify(html, options) {
 		})
 		.join('|');
 
-	html = html.replace(new RegExp(reTemplateInsert), function(match) {
+	html = html.replace(new RegExp(reTemplateInsert, 'g'), function(match) {
 		var mark;
 
 		do {
