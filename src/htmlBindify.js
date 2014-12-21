@@ -6,7 +6,7 @@ var htmlparser = require('htmlparser2');
  * @returns {string}
  */
 function escapeRegExp(re) {
-	return re.replace(/([?!\.{}[+\-\]^|$(=:)\/\\*])/g, '\\$1');
+	return re.replace(/([?(){}[+\-\]^|$\.\/\\*])/g, '\\$1');
 }
 
 var selfClosingTags = {
@@ -82,16 +82,15 @@ function astToHTML(ast, xhtmlMode) {
 			case 'style':
 			case 'tag': {
 				return '<' + item.name +
-
 					Object.keys(item.attribs)
 						.map(function(name) {
 							return ' ' + name + '="' + this[name] + '"';
 						}, item.attribs)
 						.join('') +
-
-					(item.children.length ?
-						'>' + astToHTML(item.children, xhtmlMode) + '</' + item.name + '>' :
-						(item.name in selfClosingTags ? (xhtmlMode ? ' />' : '>') : '></' + item.name + '>')
+					(
+						item.children.length ?
+							'>' + astToHTML(item.children, xhtmlMode) + '</' + item.name + '>' :
+							(item.name in selfClosingTags ? (xhtmlMode ? ' />' : '>') : '></' + item.name + '>')
 					);
 			}
 			case 'text': {
@@ -109,18 +108,18 @@ function astToHTML(ast, xhtmlMode) {
 
 /**
  * @param {Array} ast
- * @param {Function} callback
+ * @param {Function} cb
  */
-function processAST(ast, callback) {
+function processAST(ast, cb) {
 	ast.forEach(function(item) {
-		callback(item);
+		cb(item);
 
 		switch (item.type) {
 			case 'script':
 			case 'style':
 			case 'tag': {
 				if (item.children.length) {
-					processAST(item.children, callback);
+					processAST(item.children, cb);
 				}
 			}
 		}
@@ -128,85 +127,82 @@ function processAST(ast, callback) {
 }
 
 /**
- * @param {Array<string>} data
- * @returns {string}
- */
-function dataToJS(data) {
-	return data
-		.reduce(function(js, item, index) {
-			if (index % 2) {
-				js.push(
-					/^([$_a-zA-Z][$\w]*)(?:\.[$_a-zA-Z][$\w]*)*$/.test(item) && RegExp.$1 != 'this' ?
-						'this.' + item + '()' :
-						'(' + item + ')'
-				);
-			} else {
-				if (item) {
-					js.push(
-						'\'' + item
-							.split('\'').join('\\\'')
-							.split('\r').join('\\r')
-							.split('\n').join('\\n')
-							.split('"').join('&quot;')
-							.split(';').join('\\x3b') + '\''
-					);
-				} else {
-					if (index == 0) {
-						js.push('\'\'');
-					}
-				}
-			}
-
-			return js;
-		}, [])
-		.join(' + ');
-}
-
-/**
  * @param {Object} item
  * @param {string} type
  * @param {string} [attrName]
  * @param {Array<string>} data
+ * @param {Array<string>} doTemplateDelimiters
  */
-function pushBinding(item, type, attrName, data) {
-	var attrs;
+function pushBinding(item, type, attrName, data, doTemplateDelimiters) {
+	var attrs = (type == 'text' ? item.prev || item.parent || item.next : item).attribs;
+	var attrDataBind = (attrs['data-bind'] || '').trim();
+
+	if (attrDataBind) {
+		attrDataBind += attrDataBind[attrDataBind.length - 1] == ',' ? ' ' : ', ';
+	}
+
+	var js = [];
+	var text = [];
+
+	data.forEach(function(item, index) {
+		if (index % 2) {
+			js.push('this.' + item + '()');
+			text.push(doTemplateDelimiters[0] + 'this.' + item + '()' + doTemplateDelimiters[1]);
+		} else {
+			if (item) {
+				js.push(
+					'\'' + item
+						.split('"').join('&quot;')
+						.split('\\').join('\\\\')
+						.split('\'').join('\\\'')
+						.split('\r').join('\\r')
+						.split('\n').join('\\n')
+						.split(',').join('\\x2c') + '\''
+				);
+
+				text.push(item);
+			} else {
+				if (index == 0) {
+					js.push('\'\'');
+				}
+			}
+		}
+	});
+
+	js = js.join(' + ');
+	text = text.join('');
 
 	if (type == 'text') {
-		attrs = (item.prev || item.parent || item.next).attribs;
+		attrs['data-bind'] = attrDataBind +
+			'text(' + (item.prev ? 'next' : (item.parent ? 'first' : 'prev')) + '): ' +
+			js;
 
-		attrs['data-bind'] = (attrs['data-bind'] ? attrs['data-bind'] + ' ' : '') +
-			'text(' +
-			(item.prev ? 'next' : (item.parent ? 'first' : 'prev')) +
-			'): ' +
-			dataToJS(data) +
-			';';
-
-		item.data = ' ';
+		item.data = text;
 	} else {
-		attrs = item.attribs;
-
-		attrs['data-bind'] = (attrs['data-bind'] ? attrs['data-bind'] + ' ' : '') +
+		attrs['data-bind'] = attrDataBind +
 			(attrName == 'value' ? 'value: ' : (attrName == 'style' ? 'css: ' : 'attr(' + attrName + '): ')) +
-			dataToJS(data) +
-			';';
+			js;
 
-		delete attrs[attrName];
+		attrs[attrName] = text;
 	}
 }
 
 var defaults = {
 	xhtmlMode: false,
-	templateDelimiters: [['<%', '%>'], ['{{', '}}']],
-	bindingDelimiters: ['{', '}']
+	templateDelimiters: [['{{', '}}'], ['<%', '%>']],
+	bindingDelimiters: ['{', '}'],
+	doTemplateDelimiters: ['{{', '}}'],
+	skipAttributes: ['data-bind', 'data-options']
 };
 
 /**
  * @param {string} html
  * @param {Object} [options]
  * @param {boolean} [options.xhtmlMode=false]
- * @param {Array} [options.templateDelimiters=[['<%', '%>'], ['{{', '}}']]]
- * @param {Array} [options.bindingDelimiters=['{', '}']]
- * @param {Function} [options.pushBinding]
+ * @param {Array<Array<string>>} [options.templateDelimiters=[['{{', '}}'], ['<%', '%>']]]
+ * @param {Array<string>} [options.bindingDelimiters=['{', '}']]
+ * @param {Array<string>} [options.doTemplateDelimiters=['{{', '}}']]
+ * @param {Array<string>} [options.skipAttributes=['data-bind', 'data-options']]
  * @returns {string}
  */
 function htmlBindify(html, options) {
@@ -215,9 +211,10 @@ function htmlBindify(html, options) {
 	}
 	options.__proto__ = defaults;
 
-	var pushBinding_ = options.pushBinding || pushBinding;
+	var doTemplateDelimiters = options.doTemplateDelimiters;
+	var skipAttributes = options.skipAttributes;
 
-	var clippings = [];
+	var fragments = [];
 	var idCounter = 0;
 
 	var reTemplateInsert = options.templateDelimiters
@@ -233,45 +230,46 @@ function htmlBindify(html, options) {
 			mark = 'bind' + (++idCounter) + 'ify';
 		} while (html.indexOf(mark) != -1);
 
-		clippings.push({ mark: mark, text: match });
+		fragments.push({ mark: mark, text: match });
 
 		return mark;
 	});
 
 	var ast = htmlToAST(html);
 
-	var reBinding = new RegExp(
-		escapeRegExp(options.bindingDelimiters[0]) + '([\\s\\S]*?)' + escapeRegExp(options.bindingDelimiters[1])
+	var reBindingInsert = new RegExp(
+		escapeRegExp(options.bindingDelimiters[0]) + '\\s*([$_a-zA-Z][$\\w]*(?:\\.[$_a-zA-Z][$\\w]*)*)\\s*' +
+			escapeRegExp(options.bindingDelimiters[1])
 	);
 
 	processAST(ast, function(item) {
 		if (item.type == 'text') {
-			var text = item.data.split(reBinding);
+			var text = item.data.split(reBindingInsert);
 
 			if (text.length > 1) {
-				pushBinding_(item, 'text', undefined, text);
+				pushBinding(item, 'text', undefined, text, doTemplateDelimiters);
 			}
 		} else if (item.type == 'tag') {
 			var attrs = item.attribs;
 
 			Object.keys(attrs).forEach(function(name) {
-				if (name.slice(0, 5) != 'data-') {
-					var value = attrs[name].split(reBinding);
+				if (skipAttributes.indexOf(name) == -1) {
+					var value = attrs[name].split(reBindingInsert);
 
 					if (value.length > 1) {
-						pushBinding_(item, 'attr', name, value);
+						pushBinding(item, 'attr', name, value, doTemplateDelimiters);
 					}
 				}
 			});
 		}
 	});
 
-	html = astToHTML(ast);
+	html = astToHTML(ast, options.xhtmlMode);
 
-	var i = clippings.length;
+	var i = fragments.length;
 
 	while (i) {
-		html = html.replace(clippings[--i].mark, clippings[i].text);
+		html = html.split(fragments[--i].mark).join(fragments[i].text);
 	}
 
 	return html;
