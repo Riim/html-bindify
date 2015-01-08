@@ -214,7 +214,7 @@ function htmlBindify(html, options) {
 	var doTemplateDelimiters = options.doTemplateDelimiters;
 	var skipAttributes = options.skipAttributes;
 
-	var fragments = [];
+	var chunks = [];
 	var idCounter = 0;
 
 	var reTemplateInsert = options.templateDelimiters
@@ -230,7 +230,7 @@ function htmlBindify(html, options) {
 			mark = 'bind' + (++idCounter) + 'ify';
 		} while (html.indexOf(mark) != -1);
 
-		fragments.push({ mark: mark, text: match });
+		chunks.push({ mark: mark, text: match });
 
 		return mark;
 	});
@@ -266,10 +266,10 @@ function htmlBindify(html, options) {
 
 	html = astToHTML(ast, options.xhtmlMode);
 
-	var i = fragments.length;
+	var i = chunks.length;
 
 	while (i) {
-		html = html.split(fragments[--i].mark).join(fragments[i].text);
+		html = html.split(chunks[--i].mark).join(chunks[i].text);
 	}
 
 	return html;
