@@ -197,27 +197,27 @@ var defaults = {
 
 /**
  * @param {string} html
- * @param {Object} [options]
- * @param {boolean} [options.xhtmlMode=false]
- * @param {Array<Array<string>>} [options.templateDelimiters=[['{{', '}}'], ['<%', '%>']]]
- * @param {Array<string>} [options.bindingDelimiters=['{', '}']]
- * @param {Array<string>} [options.doTemplateDelimiters=['{{', '}}']]
- * @param {Array<string>} [options.skipAttributes=['data-bind', 'data-options']]
+ * @param {Object} [opts]
+ * @param {boolean} [opts.xhtmlMode=false]
+ * @param {Array<Array<string>>} [opts.templateDelimiters=[['{{', '}}'], ['<%', '%>']]]
+ * @param {Array<string>} [opts.bindingDelimiters=['{', '}']]
+ * @param {Array<string>} [opts.doTemplateDelimiters=['{{', '}}']]
+ * @param {Array<string>} [opts.skipAttributes=['data-bind', 'data-options']]
  * @returns {string}
  */
-function htmlBindify(html, options) {
-	if (!options) {
-		options = {};
+function htmlBindify(html, opts) {
+	if (!opts) {
+		opts = {};
 	}
-	options.__proto__ = defaults;
+	opts.__proto__ = defaults;
 
-	var doTemplateDelimiters = options.doTemplateDelimiters;
-	var skipAttributes = options.skipAttributes;
+	var doTemplateDelimiters = opts.doTemplateDelimiters;
+	var skipAttributes = opts.skipAttributes;
 
 	var chunks = [];
 	var idCounter = 0;
 
-	var reTemplateInsert = options.templateDelimiters
+	var reTemplateInsert = opts.templateDelimiters
 		.map(function(templateDelimiters) {
 			return escapeRegExp(templateDelimiters[0]) + '[\\s\\S]*?' + escapeRegExp(templateDelimiters[1]);
 		})
@@ -238,8 +238,8 @@ function htmlBindify(html, options) {
 	var ast = htmlToAST(html);
 
 	var reBindingInsert = new RegExp(
-		escapeRegExp(options.bindingDelimiters[0]) + '\\s*([$_a-zA-Z][$\\w]*(?:\\.[$_a-zA-Z][$\\w]*)*)\\s*' +
-			escapeRegExp(options.bindingDelimiters[1])
+		escapeRegExp(opts.bindingDelimiters[0]) + '\\s*([$_a-zA-Z][$\\w]*(?:\\.[$_a-zA-Z][$\\w]*)*)\\s*' +
+			escapeRegExp(opts.bindingDelimiters[1])
 	);
 
 	processAST(ast, function(item) {
@@ -264,7 +264,7 @@ function htmlBindify(html, options) {
 		}
 	});
 
-	html = astToHTML(ast, options.xhtmlMode);
+	html = astToHTML(ast, opts.xhtmlMode);
 
 	var i = chunks.length;
 
