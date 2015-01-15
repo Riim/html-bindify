@@ -127,18 +127,21 @@ function processAST(ast, cb) {
 }
 
 /**
+ * @private
+ *
  * @param {Object} item
  * @param {string} type
  * @param {string} [attrName]
  * @param {Array<string>} data
+ * @param {string} attrBindName
  * @param {Array<string>} doTemplateDelimiters
  */
-function pushBinding(item, type, attrName, data, doTemplateDelimiters) {
+function pushBinding(item, type, attrName, data, attrBindName, doTemplateDelimiters) {
 	var attrs = (type == 'text' ? item.prev || item.parent || item.next : item).attribs;
-	var attrDataBind = (attrs['data-bind'] || '').trim();
+	var attrBindValue = (attrs[attrBindName] || '').trim();
 
-	if (attrDataBind) {
-		attrDataBind += attrDataBind[attrDataBind.length - 1] == ',' ? ' ' : ', ';
+	if (attrBindValue) {
+		attrBindValue += attrBindValue[attrBindValue.length - 1] == ',' ? ' ' : ', ';
 	}
 
 	var js = [];
@@ -147,7 +150,7 @@ function pushBinding(item, type, attrName, data, doTemplateDelimiters) {
 	data.forEach(function(item, index) {
 		if (index % 2) {
 			js.push('this.' + item + '()');
-			text.push(doTemplateDelimiters[0] + 'this.' + item + '()' + doTemplateDelimiters[1]);
+			text.push(doTemplateDelimiters[0] + item + '()' + doTemplateDelimiters[1]);
 		} else {
 			if (item) {
 				js.push(
@@ -173,13 +176,13 @@ function pushBinding(item, type, attrName, data, doTemplateDelimiters) {
 	text = text.join('');
 
 	if (type == 'text') {
-		attrs['data-bind'] = attrDataBind +
+		attrs[attrBindName] = attrBindValue +
 			'text(' + (item.prev ? 'next' : (item.parent ? 'first' : 'prev')) + '): ' +
 			js;
 
 		item.data = text;
 	} else {
-		attrs['data-bind'] = attrDataBind +
+		attrs[attrBindName] = attrBindValue +
 			(attrName == 'value' ? 'value: ' : (attrName == 'style' ? 'css: ' : 'attr(' + attrName + '): ')) +
 			js;
 
@@ -189,20 +192,22 @@ function pushBinding(item, type, attrName, data, doTemplateDelimiters) {
 
 var defaults = {
 	xhtmlMode: false,
+	attrBindName: 'data-bind',
+	skipAttributes: ['data-bind', 'data-options'],
 	templateDelimiters: [['{{', '}}'], ['<%', '%>']],
 	bindingDelimiters: ['{', '}'],
-	doTemplateDelimiters: ['{{', '}}'],
-	skipAttributes: ['data-bind', 'data-options']
+	doTemplateDelimiters: ['{{', '}}']
 };
 
 /**
  * @param {string} html
  * @param {Object} [opts]
  * @param {boolean} [opts.xhtmlMode=false]
+ * @param {string} [attrBindName='data-bind']
+ * @param {Array<string>} [opts.skipAttributes=['data-options']]
  * @param {Array<Array<string>>} [opts.templateDelimiters=[['{{', '}}'], ['<%', '%>']]]
  * @param {Array<string>} [opts.bindingDelimiters=['{', '}']]
  * @param {Array<string>} [opts.doTemplateDelimiters=['{{', '}}']]
- * @param {Array<string>} [opts.skipAttributes=['data-bind', 'data-options']]
  * @returns {string}
  */
 function htmlBindify(html, opts) {
@@ -211,8 +216,13 @@ function htmlBindify(html, opts) {
 	}
 	opts.__proto__ = defaults;
 
-	var doTemplateDelimiters = opts.doTemplateDelimiters;
+	var attrBindName = opts.attrBindName;
 	var skipAttributes = opts.skipAttributes;
+	var doTemplateDelimiters = opts.doTemplateDelimiters;
+
+	if (skipAttributes.indexOf(attrBindName) == -1) {
+		skipAttributes.push(attrBindName);
+	}
 
 	var chunks = [];
 	var idCounter = 0;
@@ -247,7 +257,7 @@ function htmlBindify(html, opts) {
 			var text = item.data.split(reBindingInsert);
 
 			if (text.length > 1) {
-				pushBinding(item, 'text', undefined, text, doTemplateDelimiters);
+				pushBinding(item, 'text', undefined, text, attrBindName, doTemplateDelimiters);
 			}
 		} else if (item.type == 'tag') {
 			var attrs = item.attribs;
@@ -257,7 +267,7 @@ function htmlBindify(html, opts) {
 					var value = attrs[name].split(reBindingInsert);
 
 					if (value.length > 1) {
-						pushBinding(item, 'attr', name, value, doTemplateDelimiters);
+						pushBinding(item, 'attr', name, value, attrBindName, doTemplateDelimiters);
 					}
 				}
 			});
