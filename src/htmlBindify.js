@@ -221,7 +221,7 @@ function htmlBindify(html, opts) {
 	var doTemplateDelimiters = opts.doTemplateDelimiters;
 
 	if (skipAttributes.indexOf(attrBindName) == -1) {
-		skipAttributes.push(attrBindName);
+		skipAttributes = skipAttributes.concat(attrBindName);
 	}
 
 	var chunks = [];
