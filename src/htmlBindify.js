@@ -140,8 +140,8 @@ function pushBinding(item, type, attrName, data, attrBindName, doTemplateDelimit
 	var attrs = (type == 'text' ? item.prev || item.parent || item.next : item).attribs;
 	var attrBindValue = (attrs[attrBindName] || '').trim();
 
-	if (attrBindValue) {
-		attrBindValue += attrBindValue[attrBindValue.length - 1] == ',' ? ' ' : ', ';
+	if (attrBindValue && attrBindValue.slice(-1) != ',') {
+		attrBindValue += ',';
 	}
 
 	var js = [];
@@ -172,18 +172,18 @@ function pushBinding(item, type, attrName, data, attrBindName, doTemplateDelimit
 		}
 	});
 
-	js = js.join(' + ');
+	js = js.join('+');
 	text = text.join('');
 
 	if (type == 'text') {
 		attrs[attrBindName] = attrBindValue +
-			'text(' + (item.prev ? 'next' : (item.parent ? 'first' : 'prev')) + '): ' +
+			'text(' + (item.prev ? 'next' : (item.parent ? 'first' : 'prev')) + '):' +
 			js;
 
 		item.data = text;
 	} else {
 		attrs[attrBindName] = attrBindValue +
-			(attrName == 'value' ? 'value: ' : (attrName == 'style' ? 'css: ' : 'attr(' + attrName + '): ')) +
+			(attrName == 'value' ? 'value:' : (attrName == 'style' ? 'css:' : 'attr(' + attrName + '):')) +
 			js;
 
 		attrs[attrName] = text;
