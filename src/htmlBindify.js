@@ -247,6 +247,10 @@ function htmlBindify(html, opts) {
 
 	var ast = htmlToAST(html);
 
+	if (ast.length == 1 && ast[0].type == 'text') {
+		ast = htmlToAST('<span>' + html + '</span>');
+	}
+
 	var reBindingInsert = new RegExp(
 		escapeRegExp(opts.bindingDelimiters[0])
 			+ '\\s*([$_a-zA-Z][$\\w]*(?:\\(\\))*(?:\\.[$_a-zA-Z][$\\w]*(?:\\(\\))*)*)\\s*' +
