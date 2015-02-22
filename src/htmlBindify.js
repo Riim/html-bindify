@@ -253,7 +253,7 @@ function htmlBindify(html, opts) {
 
 	var reBindingInsert = new RegExp(
 		escapeRegExp(opts.bindingDelimiters[0])
-			+ '\\s*([$_a-zA-Z][$\\w]*(?:\\(\\))*(?:\\.[$_a-zA-Z][$\\w]*(?:\\(\\))*)*)\\s*' +
+			+ '\\s*([$_a-zA-Z][$\\w]*(?:\\(\\))?(?:\\.[$_a-zA-Z][$\\w]*(?:\\(\\))?)*)\\s*' +
 			escapeRegExp(opts.bindingDelimiters[1])
 	);
 
