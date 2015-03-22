@@ -1,12 +1,14 @@
 
 var htmlparser = require('htmlparser2');
 
+var reEscapableChars = /([?+|$(){}[^.\-\]\/\\*])/g;
+
 /**
  * @param {string} re
  * @returns {string}
  */
 function escapeRegExp(re) {
-	return re.replace(/([?(){}[+\-\]^|$\.\/\\*])/g, '\\$1');
+	return re.replace(reEscapableChars, '\\$1');
 }
 
 var selfClosingTags = {
@@ -245,17 +247,15 @@ function htmlBindify(html, opts) {
 		return mark;
 	});
 
+	var reBindingInsert = new RegExp(
+		escapeRegExp(opts.bindingDelimiters[0]) + '\\s*(\\S.*?)\\s*' + escapeRegExp(opts.bindingDelimiters[1])
+	);
+
 	var ast = htmlToAST(html);
 
-	if (ast.length == 1 && ast[0].type == 'text') {
+	if (ast.length == 1 && ast[0].type == 'text' && reBindingInsert.test(html)) {
 		ast = htmlToAST('<span>' + html + '</span>');
 	}
-
-	var reBindingInsert = new RegExp(
-		escapeRegExp(opts.bindingDelimiters[0])
-			+ '\\s*([$_a-zA-Z][$\\w]*(?:\\(\\))?(?:\\.[$_a-zA-Z][$\\w]*(?:\\(\\))?)*)\\s*' +
-			escapeRegExp(opts.bindingDelimiters[1])
-	);
 
 	processAST(ast, function(item) {
 		if (item.type == 'text') {
