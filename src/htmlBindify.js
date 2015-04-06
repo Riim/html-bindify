@@ -4,11 +4,11 @@ var htmlparser = require('htmlparser2');
 var reEscapableChars = /([?+|$(){}[^.\-\]\/\\*])/g;
 
 /**
- * @param {string} re
+ * @param {string} str
  * @returns {string}
  */
-function escapeRegExp(re) {
-	return re.replace(reEscapableChars, '\\$1');
+function escapeRegExp(str) {
+	return str.replace(reEscapableChars, '\\$1');
 }
 
 var selfClosingTags = {
@@ -50,7 +50,7 @@ var selfClosingTags = {
  * @param {string} html
  * @returns {Array}
  */
-function htmlToAST(html) {
+function htmlToDOM(html) {
 	var handler = new htmlparser.DomHandler(function(err, dom) {}, {
 		normalizeWhitespace: true
 	});
@@ -70,59 +70,64 @@ function htmlToAST(html) {
 }
 
 /**
- * @param {Array} ast
+ * @param {Array} dom
  * @param {boolean} [xhtmlMode=false]
  * @returns {string}
  */
-function astToHTML(ast, xhtmlMode) {
-	return ast.map(function(item) {
-		switch (item.type) {
+function domToHTML(dom, xhtmlMode) {
+	return dom.map(function(node) {
+		switch (node.type) {
 			case 'directive': {
-				return '<' + item.data + '>';
+				return '<' + node.data + '>';
 			}
 			case 'script':
 			case 'style':
 			case 'tag': {
-				return '<' + item.name +
-					Object.keys(item.attribs)
-						.map(function(name) {
-							return ' ' + name + '="' + this[name] + '"';
-						}, item.attribs)
-						.join('') +
-					(
-						item.children.length ?
-							'>' + astToHTML(item.children, xhtmlMode) + '</' + item.name + '>' :
-							(item.name in selfClosingTags ? (xhtmlMode ? ' />' : '>') : '></' + item.name + '>')
-					);
+				var attrs = node.attribs;
+				var html = ['<' + node.name];
+
+				for (var name in attrs) {
+					html.push(' ' + name + '="' + attrs[name] + '"');
+				}
+
+				if (node.children.length) {
+					html.push('>' + domToHTML(node.children, xhtmlMode) + '</' + node.name + '>');
+				} else {
+					if (node.name in selfClosingTags) {
+						html.push(xhtmlMode ? ' />' : '>');
+					} else {
+						html.push('></' + node.name + '>');
+					}
+				}
+
+				return html.join('');
 			}
 			case 'text': {
-				return item.data;
+				return node.data;
 			}
 			case 'cdata': {
-				return '<' + item.data + '>';
+				return '<' + node.data + '>';
 			}
 			case 'comment': {
-				return '<!--' + item.data + '-->';
+				return '<!--' + node.data + '-->';
 			}
 		}
 	}).join('');
 }
 
 /**
- * @param {Array} ast
+ * @param {Array} dom
  * @param {Function} cb
  */
-function processAST(ast, cb) {
-	ast.forEach(function(item) {
-		cb(item);
+function processDOM(dom, cb) {
+	dom.forEach(function(node, index, nodes) {
+		cb(node, index, nodes);
 
-		switch (item.type) {
+		switch (node.type) {
 			case 'script':
 			case 'style':
 			case 'tag': {
-				if (item.children.length) {
-					processAST(item.children, cb);
-				}
+				processDOM(node.children, cb);
 			}
 		}
 	});
@@ -131,32 +136,31 @@ function processAST(ast, cb) {
 /**
  * @private
  *
- * @param {Object} item
- * @param {string} type
- * @param {string} [attrName]
- * @param {Array<string>} data
+ * @param {Object} node
+ * @param {string|undefined} attrName
+ * @param {Array<string>} value
  * @param {string} attrBindName
- * @param {Array<string>} doTemplateDelimiters
+ * @param {Array<string>} templateDelimiters
  */
-function pushBinding(item, type, attrName, data, attrBindName, doTemplateDelimiters) {
-	var attrs = (type == 'text' ? item.prev || item.parent || item.next : item).attribs;
+function pushBinding(node, attrName, value, attrBindName, templateDelimiters) {
+	var attrs = (node.type == 'tag' ? node : node.prev || node.parent || node.next).attribs;
 	var attrBindValue = (attrs[attrBindName] || '').trim();
 
-	if (attrBindValue && attrBindValue.slice(-1) != ',') {
+	if (attrBindValue && attrBindValue[attrBindValue.length - 1] != ',') {
 		attrBindValue += ',';
 	}
 
-	var js = [];
-	var text = [];
+	var bindingExpr = [];
+	var newValue = [];
 
-	data.forEach(function(item, index) {
+	value.forEach(function(chunk, index) {
 		if (index % 2) {
-			js.push('this.' + item + '()');
-			text.push(doTemplateDelimiters[0] + item + '()' + doTemplateDelimiters[1]);
+			bindingExpr.push('this.' + chunk + '()');
+			newValue.push(templateDelimiters[0] + chunk + '()' + templateDelimiters[1]);
 		} else {
-			if (item) {
-				js.push(
-					'\'' + item
+			if (chunk) {
+				bindingExpr.push(
+					'\'' + chunk
 						.split('"').join('&quot;')
 						.split('\\').join('\\\\')
 						.split('\'').join('\\\'')
@@ -165,30 +169,30 @@ function pushBinding(item, type, attrName, data, attrBindName, doTemplateDelimit
 						.split(',').join('\\x2c') + '\''
 				);
 
-				text.push(item);
+				newValue.push(chunk);
 			} else {
 				if (index == 0) {
-					js.push('\'\'');
+					bindingExpr.push('\'\'');
 				}
 			}
 		}
 	});
 
-	js = js.join('+');
-	text = text.join('');
+	bindingExpr = bindingExpr.join('+');
+	newValue = newValue.join('');
 
-	if (type == 'text') {
-		attrs[attrBindName] = attrBindValue +
-			'text(' + (item.prev ? 'next' : (item.parent ? 'first' : 'prev')) + '):' +
-			js;
-
-		item.data = text;
-	} else {
+	if (node.type == 'tag') {
 		attrs[attrBindName] = attrBindValue +
 			(attrName == 'value' ? 'value:' : (attrName == 'style' ? 'css:' : 'attr(' + attrName + '):')) +
-			js;
+			bindingExpr;
 
-		attrs[attrName] = text;
+		attrs[attrName] = newValue;
+	} else {
+		attrs[attrBindName] = attrBindValue +
+			'text(' + (node.prev ? 'next' : (node.parent ? 'first' : 'prev')) + '):' +
+			bindingExpr;
+
+		node.data = newValue;
 	}
 }
 
@@ -196,9 +200,8 @@ var defaults = {
 	xhtmlMode: false,
 	attrBindName: 'data-bind',
 	skipAttributes: ['data-bind', 'data-options'],
-	templateDelimiters: [['{{', '}}'], ['<%', '%>']],
-	bindingDelimiters: ['{', '}'],
-	doTemplateDelimiters: ['{{', '}}']
+	templateDelimiters: ['{{', '}}'],
+	bindingDelimiters: ['{', '}']
 };
 
 /**
@@ -207,9 +210,8 @@ var defaults = {
  * @param {boolean} [opts.xhtmlMode=false]
  * @param {string} [attrBindName='data-bind']
  * @param {Array<string>} [opts.skipAttributes=['data-options']]
- * @param {Array<Array<string>>} [opts.templateDelimiters=[['{{', '}}'], ['<%', '%>']]]
+ * @param {Array<string>} [opts.templateDelimiters=['{{', '}}']]
  * @param {Array<string>} [opts.bindingDelimiters=['{', '}']]
- * @param {Array<string>} [opts.doTemplateDelimiters=['{{', '}}']]
  * @returns {string}
  */
 function htmlBindify(html, opts) {
@@ -219,72 +221,100 @@ function htmlBindify(html, opts) {
 	opts.__proto__ = defaults;
 
 	var attrBindName = opts.attrBindName;
-	var skipAttributes = opts.skipAttributes;
-	var doTemplateDelimiters = opts.doTemplateDelimiters;
+	var skipAttributes = opts.skipAttributes.indexOf(attrBindName) == -1 ?
+		opts.skipAttributes.concat(attrBindName) :
+		opts.skipAttributes;
+	var templateDelimiters = opts.templateDelimiters;
+	var bindingDelimiters = opts.bindingDelimiters;
 
-	if (skipAttributes.indexOf(attrBindName) == -1) {
-		skipAttributes = skipAttributes.concat(attrBindName);
-	}
+	var reTemplateInsert = RegExp(
+		escapeRegExp(templateDelimiters[0]) + '[\\s\\S]*?' + escapeRegExp(templateDelimiters[1]),
+		'g'
+	);
+	var reBindingInsert = RegExp(
+		escapeRegExp(bindingDelimiters[0]) + '\\s*(\\S.*?)\\s*' + escapeRegExp(bindingDelimiters[1])
+	);
 
-	var chunks = [];
-	var idCounter = 0;
+	var markIdCounter = 0;
+	var reMarks = [];
+	var templateInserts = [];
 
-	var reTemplateInsert = opts.templateDelimiters
-		.map(function(templateDelimiters) {
-			return escapeRegExp(templateDelimiters[0]) + '[\\s\\S]*?' + escapeRegExp(templateDelimiters[1]);
-		})
-		.join('|');
-
-	html = html.replace(new RegExp(reTemplateInsert, 'g'), function(match) {
+	html = html.replace(reTemplateInsert, function(insert) {
 		var mark;
 
 		do {
-			mark = 'bind' + (++idCounter) + 'ify';
+			mark = 'bind' + (++markIdCounter) + 'ify';
 		} while (html.indexOf(mark) != -1);
 
-		chunks.push({ mark: mark, text: match });
+		reMarks.push(mark);
+		templateInserts.push({ mark: mark, insert: insert });
 
 		return mark;
 	});
 
-	var reBindingInsert = new RegExp(
-		escapeRegExp(opts.bindingDelimiters[0]) + '\\s*(\\S.*?)\\s*' + escapeRegExp(opts.bindingDelimiters[1])
-	);
+	reMarks = RegExp(reMarks.join('|'));
 
-	var ast = htmlToAST(html);
+	var dom = htmlToDOM(html);
 
-	if (ast.length == 1 && ast[0].type == 'text' && reBindingInsert.test(html)) {
-		ast = htmlToAST('<span>' + html + '</span>');
-	}
+	processDOM(dom, function(node, index, nodes) {
+		if (node.type == 'text') {
+			var value = node.data;
 
-	processAST(ast, function(item) {
-		if (item.type == 'text') {
-			var text = item.data.split(reBindingInsert);
+			if (reBindingInsert.test(value) && reMarks.test(value)) {
+				value = value.replace(reBindingInsert, function(value) {
+					return '<span>' + value + '</span>';
+				});
 
-			if (text.length > 1) {
-				pushBinding(item, 'text', undefined, text, attrBindName, doTemplateDelimiters);
-			}
-		} else if (item.type == 'tag') {
-			var attrs = item.attribs;
+				var dom = htmlToDOM(value);
 
-			Object.keys(attrs).forEach(function(name) {
-				if (skipAttributes.indexOf(name) == -1) {
-					var value = attrs[name].split(reBindingInsert);
+				dom[0].prev = node.prev;
+				dom[dom.length - 1].next = node.next;
 
-					if (value.length > 1) {
-						pushBinding(item, 'attr', name, value, attrBindName, doTemplateDelimiters);
+				var parent = node.parent;
+
+				if (parent) {
+					for (var i = dom.length; i;) {
+						dom[--i].parent = parent;
 					}
 				}
-			});
+
+				nodes.splice.apply(nodes, [index, 1].concat(dom));
+			}
 		}
 	});
 
-	html = astToHTML(ast, opts.xhtmlMode);
+	if (dom.length == 1 && dom[0].type == 'text' && reBindingInsert.test(html)) {
+		dom = htmlToDOM('<span>' + html + '</span>');
+	}
 
-	var i = chunks.length;
+	processDOM(dom, function(node) {
+		if (node.type == 'tag') {
+			var attrs = node.attribs;
 
-	while (i) {
-		html = html.split(chunks[--i].mark).join(chunks[i].text);
+			for (var name in attrs) {
+				if (skipAttributes.indexOf(name) != -1) {
+					continue;
+				}
+
+				var value = attrs[name].split(reBindingInsert);
+
+				if (value.length > 1) {
+					pushBinding(node, name, value, attrBindName, templateDelimiters);
+				}
+			}
+		} else if (node.type == 'text') {
+			var value = node.data.split(reBindingInsert);
+
+			if (value.length > 1) {
+				pushBinding(node, undefined, value, attrBindName, templateDelimiters);
+			}
+		}
+	});
+
+	html = domToHTML(dom, opts.xhtmlMode);
+
+	for (var i = templateInserts.length; i;) {
+		html = html.split(templateInserts[--i].mark).join(templateInserts[i].insert);
 	}
 
 	return html;
