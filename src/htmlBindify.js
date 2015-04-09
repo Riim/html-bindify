@@ -35,15 +35,15 @@ var selfClosingTags = {
 	wbr: 1,
 
 	// svg tags
-	path: 1,
 	circle: 1,
 	ellipse: 1,
 	line: 1,
-	rect: 1,
-	use: 1,
-	stop: 1,
+	path: 1,
+	polygone: 1,
 	polyline: 1,
-	polygone: 1
+	rect: 1,
+	stop: 1,
+	use: 1
 };
 
 /**
@@ -140,9 +140,9 @@ function processDOM(dom, cb) {
  * @param {string|undefined} attrName
  * @param {Array<string>} value
  * @param {string} attrBindName
- * @param {Array<string>} templateDelimiters
+ * @param {Array<string>} outputDelimiters
  */
-function pushBinding(node, attrName, value, attrBindName, templateDelimiters) {
+function pushBinding(node, attrName, value, attrBindName, outputDelimiters) {
 	var attrs = (node.type == 'tag' ? node : node.prev || node.parent || node.next).attribs;
 	var attrBindValue = (attrs[attrBindName] || '').trim();
 
@@ -156,7 +156,7 @@ function pushBinding(node, attrName, value, attrBindName, templateDelimiters) {
 	value.forEach(function(chunk, index) {
 		if (index % 2) {
 			bindingExpr.push('this.' + chunk + '()');
-			newValue.push(templateDelimiters[0] + chunk + '()' + templateDelimiters[1]);
+			newValue.push(outputDelimiters[0] + chunk + '()' + outputDelimiters[1]);
 		} else {
 			if (chunk) {
 				bindingExpr.push(
@@ -200,8 +200,9 @@ var defaults = {
 	xhtmlMode: false,
 	attrBindName: 'data-bind',
 	skipAttributes: ['data-bind', 'data-options'],
-	templateDelimiters: ['{{', '}}'],
-	bindingDelimiters: ['{', '}']
+	inputTemplateDelimiters: ['{{', '}}'],
+	inputBindingDelimiters: ['{', '}'],
+	outputDelimiters: ['{{', '}}']
 };
 
 /**
@@ -210,8 +211,9 @@ var defaults = {
  * @param {boolean} [opts.xhtmlMode=false]
  * @param {string} [attrBindName='data-bind']
  * @param {Array<string>} [opts.skipAttributes=['data-options']]
- * @param {Array<string>} [opts.templateDelimiters=['{{', '}}']]
- * @param {Array<string>} [opts.bindingDelimiters=['{', '}']]
+ * @param {Array<string>} [opts.inputTemplateDelimiters=['{{', '}}']]
+ * @param {Array<string>} [opts.inputBindingDelimiters=['{', '}']]
+ * @param {Array<string>} [opts.outputDelimiters=['{{', '}}']]
  * @returns {string}
  */
 function htmlBindify(html, opts) {
@@ -224,15 +226,14 @@ function htmlBindify(html, opts) {
 	var skipAttributes = opts.skipAttributes.indexOf(attrBindName) == -1 ?
 		opts.skipAttributes.concat(attrBindName) :
 		opts.skipAttributes;
-	var templateDelimiters = opts.templateDelimiters;
-	var bindingDelimiters = opts.bindingDelimiters;
+	var outputDelimiters = opts.outputDelimiters;
 
 	var reTemplateInsert = RegExp(
-		escapeRegExp(templateDelimiters[0]) + '[\\s\\S]*?' + escapeRegExp(templateDelimiters[1]),
+		escapeRegExp(opts.inputTemplateDelimiters[0]) + '[\\s\\S]*?' + escapeRegExp(opts.inputTemplateDelimiters[1]),
 		'g'
 	);
 	var reBindingInsert = RegExp(
-		escapeRegExp(bindingDelimiters[0]) + '\\s*(\\S.*?)\\s*' + escapeRegExp(bindingDelimiters[1])
+		escapeRegExp(opts.inputBindingDelimiters[0]) + '\\s*(\\S.*?)\\s*' + escapeRegExp(opts.inputBindingDelimiters[1])
 	);
 
 	var markIdCounter = 0;
@@ -299,14 +300,14 @@ function htmlBindify(html, opts) {
 				var value = attrs[name].split(reBindingInsert);
 
 				if (value.length > 1) {
-					pushBinding(node, name, value, attrBindName, templateDelimiters);
+					pushBinding(node, name, value, attrBindName, outputDelimiters);
 				}
 			}
 		} else if (node.type == 'text') {
 			var value = node.data.split(reBindingInsert);
 
 			if (value.length > 1) {
-				pushBinding(node, undefined, value, attrBindName, templateDelimiters);
+				pushBinding(node, undefined, value, attrBindName, outputDelimiters);
 			}
 		}
 	});
