@@ -1,6 +1,6 @@
 {
   "name": "html-bindify",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "html-bindify",
   "main": "index.js",
   "scripts": {
@@ -17,7 +17,7 @@
   },
   "homepage": "https://github.com/Riim/html-bindify",
   "dependencies": {
-    "html-binding-transform": "^0.1.0",
+    "html-binding-transform": "^1.0.0",
     "through": "^2.3.8"
   }
 }
